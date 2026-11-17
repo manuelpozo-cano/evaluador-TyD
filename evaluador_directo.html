@@ -142,7 +142,7 @@
       <p>Tecnología y Digitalización | Manuel Pozo Cano - Colegio La Hispanidad</p>
     </div>
     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-      <span id="autoSyncStatus" style="font-size:0.82rem; color:#16a34a; font-weight:700; background:#dcfce7; padding:4px 10px; border-radius:12px; border:1px solid #86efac;">⚡ Auto-sincronizado</span>
+      <span id="autoSyncStatus" style="font-size:0.82rem; color:#16a34a; font-weight:700; background:#dcfce7; padding:4px 10px; border-radius:12px; border:1px solid #86efac;">☁️ Conectando nube...</span>
       <a href="index.html" class="btn-back">🏠 Volver al Inicio</a>
       <a href="seguimiento.html" class="btn-back">📊 Cuaderno de Seguimiento</a>
     </div>
@@ -279,8 +279,11 @@
     "4ESO_B": ["Araujo Carrasco, José Manuel", "Borrero De Paula, José Antonio", "Boulal, Jilali", "Escudero Limón, Daniela", "Kykish Toporovska, Diana", "Lobato Ramos, Hugo", "Martin Venegas, Ester", "Naranjo Romero, Aitana", "Pérez Rodríguez, Pablo", "Rivero Hernández, Diego Alejandro", "Rivero Hernández, Enrique Alejandro", "Rodríguez Brejano, Alexys", "Salazar Fernández, Yamilet", "Sánchez Lozada, Sergio Enrique", "Sánchez Pérez, Induara", "Sánchez Ternero, Alejandro", "Soto García, Ángela", "Terrón Quintero, José Antonio", "Torres Hernández, Javier", "Wert Hermoso, Laura"]
   };
 
+  const CLAVE_STORAGE = "evaluador_directo_pruebas_v8";
   let estadoPruebas = {}; 
   let pruebaActivaId = null;
+  let alumnosBD = {};
+  let guardandoLocalmente = false;
 
   function obtenerNivelCurso(curso) {
     if (curso.startsWith("2ESO")) return "2ESO";
@@ -289,12 +292,45 @@
     return "2ESO";
   }
 
+  function cargarAlumnosBD() {
+    const guardado = localStorage.getItem("evaluador_directo_alumnos_v2");
+    if (guardado) {
+      try { alumnosBD = JSON.parse(guardado); } catch(e) { alumnosBD = JSON.parse(JSON.stringify(ALUMNOS_OFICIALES)); }
+    } else {
+      alumnosBD = JSON.parse(JSON.stringify(ALUMNOS_OFICIALES));
+    }
+  }
+
   function cargarEstadoPruebas() {
-    const raw = localStorage.getItem("evaluador_directo_pruebas_v8");
+    const raw = localStorage.getItem(CLAVE_STORAGE);
     if (raw) {
       try { estadoPruebas = JSON.parse(raw); } catch(e) { estadoPruebas = {}; }
     }
     asegurarEstructuraCursoEval();
+  }
+
+  function activarSincronizacionNube() {
+    if (!db) return;
+    db.collection("evaluacion_directo").doc("estadoGeneral").onSnapshot(doc => {
+      if (guardandoLocalmente) return;
+      if (doc.exists && doc.data() && doc.data().data) {
+        const datosNube = doc.data().data;
+        if (Object.keys(datosNube).length > 0) {
+          estadoPruebas = datosNube;
+          localStorage.setItem(CLAVE_STORAGE, JSON.stringify(estadoPruebas));
+          if (document.activeElement && document.activeElement.classList.contains("input-nota")) {
+            return;
+          }
+          renderizarTodo();
+        }
+      }
+      const statusEl = document.getElementById("autoSyncStatus");
+      if (statusEl) statusEl.textContent = "☁️ Conectado y sincronizado";
+    }, err => {
+      console.warn("Aviso Firestore:", err);
+      const statusEl = document.getElementById("autoSyncStatus");
+      if (statusEl) statusEl.textContent = "💾 Modo Local Activo";
+    });
   }
 
   function asegurarEstructuraCursoEval() {
@@ -436,12 +472,31 @@
       if (!pActiva.preguntasConfig[critId]) pActiva.preguntasConfig[critId] = 1;
     }
     renderizarTodo();
-    sincronizarConMatriz(true);
+    guardarPruebaActual(true);
+  }
+
+  function calcularMediaFila(alum, pActiva) {
+    const criteriosSel = pActiva ? (pActiva.criterios || []) : [];
+    let sumaPonderadaExamen = 0;
+    let totalPreguntasExamen = 0;
+
+    criteriosSel.forEach(critId => {
+      const val = (pActiva.notas && pActiva.notas[alum] && pActiva.notas[alum][critId] !== undefined) 
+        ? pActiva.notas[alum][critId] : "";
+      const numPreg = (pActiva.preguntasConfig && pActiva.preguntasConfig[critId]) || 1;
+
+      if (val !== "" && !isNaN(parseFloat(val))) {
+        sumaPonderadaExamen += parseFloat(val) * numPreg;
+        totalPreguntasExamen += numPreg;
+      }
+    });
+
+    return totalPreguntasExamen > 0 ? (sumaPonderadaExamen / totalPreguntasExamen).toFixed(2) : "-";
   }
 
   function renderizarTablaNotas() {
     const curso = document.getElementById("selectCurso").value;
-    const alumnos = ALUMNOS_OFICIALES[curso] || [];
+    const alumnos = alumnosBD[curso] || ALUMNOS_OFICIALES[curso] || [];
     const pActiva = obtenerPruebaActiva();
     const criteriosSel = pActiva ? (pActiva.criterios || []) : [];
 
@@ -471,55 +526,49 @@
       if (!pActiva.notas[alum]) pActiva.notas[alum] = {};
 
       let htmlRow = `<td class="col-sticky-1">${idx + 1}</td><td class="col-sticky-2">${alum}</td>`;
-      let sumaPonderadaExamen = 0;
-      let totalPreguntasExamen = 0;
 
       criteriosSel.forEach(critId => {
         const val = pActiva.notas[alum][critId] !== undefined ? pActiva.notas[alum][critId] : "";
-        const numPreg = (pActiva.preguntasConfig && pActiva.preguntasConfig[critId]) || 1;
-
-        if (val !== "" && !isNaN(parseFloat(val))) {
-          const vNum = parseFloat(val);
-          sumaPonderadaExamen += vNum * numPreg;
-          totalPreguntasExamen += numPreg;
-        }
+        const alumEsc = alum.replace(/'/g, "\'");
 
         htmlRow += `
           <td>
             <input type="number" step="0.1" min="0" max="10" class="input-nota" 
               value="${val}" 
               placeholder="0-10"
-              onchange="actualizarNotaAlumno('${alum.replace(/'/g, "\'")}', '${critId}', this.value)">
+              oninput="actualizarNotaAlumno('${alumEsc}', '${critId}', this.value, ${idx})"
+              onblur="guardarPruebaActual(true)">
           </td>
         `;
       });
 
-      let notaExamenGlobalStr = "-";
-      if (totalPreguntasExamen > 0) {
-        const mediaExamenPonderada = sumaPonderadaExamen / totalPreguntasExamen;
-        notaExamenGlobalStr = mediaExamenPonderada.toFixed(2);
-      }
-
-      htmlRow += `<td style="font-weight:800; color:#0369a1; background:#f0f9ff;">${notaExamenGlobalStr}</td>`;
+      const notaExamenGlobalStr = calcularMediaFila(alum, pActiva);
+      htmlRow += `<td id="media_fila_${idx}" style="font-weight:800; color:#0369a1; background:#f0f9ff;">${notaExamenGlobalStr}</td>`;
 
       tr.innerHTML = htmlRow;
       tbody.appendChild(tr);
     });
   }
 
-  function actualizarNotaAlumno(alum, critId, val) {
+  function actualizarNotaAlumno(alum, critId, val, rowIdx) {
     const pActiva = obtenerPruebaActiva();
     if (!pActiva) return;
     if (!pActiva.notas[alum]) pActiva.notas[alum] = {};
 
-    if (val === "" || isNaN(parseFloat(val))) {
+    const numVal = parseFloat(val.toString().replace(",", "."));
+    if (val === "" || isNaN(numVal)) {
       delete pActiva.notas[alum][critId];
     } else {
-      pActiva.notas[alum][critId] = parseFloat(val);
+      pActiva.notas[alum][critId] = numVal;
     }
 
-    guardarPruebaActual(true);
-    renderizarTablaNotas();
+    // Actualizar solo la celda de media sin destruir ni repintar los inputs activos
+    const celdaMedia = document.getElementById("media_fila_" + rowIdx);
+    if (celdaMedia) {
+      celdaMedia.textContent = calcularMediaFila(alum, pActiva);
+    }
+
+    localStorage.setItem(CLAVE_STORAGE, JSON.stringify(estadoPruebas));
   }
 
   function guardarNombrePruebaActual() {
@@ -581,54 +630,43 @@
   }
 
   function guardarPruebaActual(silencioso = false) {
-    localStorage.setItem("evaluador_directo_pruebas_v8", JSON.stringify(estadoPruebas));
-    const statusEl = document.getElementById("autoSyncStatus");
+    guardandoLocalmente = true;
+    localStorage.setItem(CLAVE_STORAGE, JSON.stringify(estadoPruebas));
+    
     if (db) {
-      if (statusEl) statusEl.textContent = "⏳ Enviando a nube...";
-      db.collection("evaluacion_directa").doc("estadoGeneral").set({
+      db.collection("evaluacion_directo").doc("estadoGeneral").set({
         data: estadoPruebas,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      }, { merge: true }).then(() => {
-        if (statusEl) statusEl.textContent = "⚡ Auto-sincronizado " + new Date().toLocaleTimeString();
+      }).then(() => {
+        setTimeout(() => { guardandoLocalmente = false; }, 1000);
+        sincronizarConMatriz(silencioso);
       }).catch(err => {
-        console.warn("Error enviando a Firestore:", err);
-        if (statusEl) statusEl.textContent = "⚠️ Error Nube (Guardado Local)";
+        guardandoLocalmente = false;
+        console.warn("Error al subir a Firestore:", err);
+        sincronizarConMatriz(silencioso);
       });
+    } else {
+      guardandoLocalmente = false;
+      sincronizarConMatriz(silencioso);
     }
-    sincronizarConMatriz(silencioso);
-  }function sincronizarConMatriz(silencioso = false) {
+  }
+
+  function sincronizarConMatriz(silencioso = false) {
     window.dispatchEvent(new Event('storage'));
     const statusEl = document.getElementById("autoSyncStatus");
     if (statusEl) {
-      statusEl.textContent = "⚡ Auto-sincronizado a las " + new Date().toLocaleTimeString();
+      statusEl.textContent = "⚡ Guardado y sincronizado (" + new Date().toLocaleTimeString() + ")";
     }
     if (!silencioso) {
-      alert("✅ Pruebas guardadas y sincronizadas con éxito.");
+      alert("✅ Pruebas guardadas localmente y enviadas a Firebase/Cuaderno con éxito.");
     }
-  }
-
-  function activarEscuchaNubeEvaluador() {
-    if (!db) return;
-    db.collection("evaluacion_directa").doc("estadoGeneral").onSnapshot(doc => {
-      if (doc.exists && doc.data() && doc.data().data) {
-        const nubeData = doc.data().data;
-        if (JSON.stringify(nubeData) !== JSON.stringify(estadoPruebas)) {
-          estadoPruebas = nubeData;
-          localStorage.setItem("evaluador_directo_pruebas_v8", JSON.stringify(estadoPruebas));
-          renderizarTodo();
-          const statusEl = document.getElementById("autoSyncStatus");
-          if (statusEl) {
-            statusEl.textContent = "⚡ Auto-sincronizado (Nube) " + new Date().toLocaleTimeString();
-          }
-        }
-      }
-    }, err => console.warn("Modo local activo:", err));
   }
 
   document.addEventListener("DOMContentLoaded", () => {
+    cargarAlumnosBD();
     cargarEstadoPruebas();
     renderizarTodo();
-    activarEscuchaNubeEvaluador();
+    activarSincronizacionNube();
   });
 </script>
 
