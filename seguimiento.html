@@ -280,7 +280,6 @@
   </div>
 </div>
 
-
 <!-- MODAL COMPARADOR ENTRE GRUPOS -->
 <div class="modal-overlay" id="modalComparadorGrupos">
   <div class="modal-card" style="max-width: 850px;">
@@ -427,67 +426,25 @@
     if (!matrizAcumuladaBD[cursoNorm][eKey][alumNorm]) matrizAcumuladaBD[cursoNorm][eKey][alumNorm] = {};
     if (!matrizAcumuladaBD[cursoNorm][eKey][alumNorm][critId]) matrizAcumuladaBD[cursoNorm][eKey][alumNorm][critId] = [];
 
-    const origLimpio = (origenStr || "SdA / Prueba").trim();
+    const origLimpio = (origenStr || "Prueba Directa").trim();
     const arr = matrizAcumuladaBD[cursoNorm][eKey][alumNorm][critId];
 
     const existIdx = arr.findIndex(item => item.origen === origLimpio);
     if (existIdx >= 0) {
       arr[existIdx].valor = valNum;
     } else {
-      arr.push({
-        origen: origLimpio,
-        valor: valNum
-      });
+      arr.push({ origen: origLimpio, valor: valNum });
     }
   }
 
   function parsearEntradaUniversal(key, data) {
     if (!data || typeof data !== "object") return;
 
-    if (key.includes("doblador")) {
-      const grupo = data.grupo || (key.split("_")[1] || "2A");
-      const alumno = data.alumno || key.split("_").slice(2).join("_");
-      const map = { c1: "TYD.2.3.1", c2: "TYD.2.2.2", c3: "TYD.2.1.2" };
-      Object.keys(map).forEach(ck => {
-        if (data[ck] !== undefined && data[ck] !== null) registrarNotaConOrigen(grupo, "1T", alumno, map[ck], data[ck], "SdA Doblador 2º ESO");
-      });
-      return;
-    }
-
-    if (key.includes("retos3eso")) {
-      const parts = key.split("_");
-      const grupo = parts[1] || "3A";
-      const alumno = parts.slice(2).join("_") || data.alumno;
-      const map = { c1: "TYD.3.1.1", c2: "TYD.3.1.3", c3: "TYD.3.2.1", c4: "TYD.3.2.2", c5: "TYD.3.4.1", c6: "TYD.3.7.1" };
-      Object.keys(map).forEach(ck => {
-        if (data[ck] !== undefined && data[ck] !== null) registrarNotaConOrigen(grupo, "1T", alumno, map[ck], data[ck], "SdA Retos 3º ESO");
-      });
-      return;
-    }
-
-    if (key.includes("eniac")) {
-      const grupo = data.grupo || (key.split("_")[1] || "4A");
-      const alumno = data.alumno || key.split("_").slice(2).join("_");
-      const map = { c1: "DIG.4.1.3", c2: "DIG.4.2.2", c3: "DIG.4.2.3", c4: "DIG.4.2.4", c5: "DIG.4.4.4" };
-      Object.keys(map).forEach(ck => {
-        if (data[ck] !== undefined && data[ck] !== null) registrarNotaConOrigen(grupo, "1T", alumno, map[ck], data[ck], "SdA ENIAC 4º ESO");
-      });
-      return;
-    }
-
-    if (key.includes("presupuesto") || key.includes("sda2presupuestos")) {
-      const grupo = data.grupo || data.curso || (key.split("_")[1] || "4A");
-      const alumno = data.alumno || key.split("_").slice(2).join("_");
-      const map = { c1: "DIG.4.1.3", c2: "DIG.4.2.2", c3: "DIG.4.2.3", c4: "DIG.4.1.2" };
-      Object.keys(map).forEach(ck => {
-        if (data[ck] !== undefined && data[ck] !== null) registrarNotaConOrigen(grupo, "1T", alumno, map[ck], data[ck], "SdA Presupuestos PC");
-      });
-      return;
-    }
-
-if (key.includes("evaluador_directo_pruebas") || key === "estadoGeneral") {
-      Object.keys(data).forEach(cKey => {
-        const evDict = data[cKey];
+    // Si viene del evaluador directo o de estadoGeneral en Firestore
+    if (key.includes("evaluador_directo_pruebas") || key === "estadoGeneral") {
+      const actualData = data.data || data;
+      Object.keys(actualData).forEach(cKey => {
+        const evDict = actualData[cKey];
         if (typeof evDict === "object" && evDict) {
           Object.keys(evDict).forEach(eKey => {
             const pruebaList = evDict[eKey];
@@ -496,9 +453,11 @@ if (key.includes("evaluador_directo_pruebas") || key === "estadoGeneral") {
                 const pNombre = p ? (p.nombre || "Prueba Directa") : "Prueba Directa";
                 if (p && p.notas) {
                   Object.keys(p.notas).forEach(alum => {
-                    Object.keys(p.notas[alum]).forEach(critId => {
-                      registrarNotaConOrigen(cKey, eKey, alum, critId, p.notas[alum][critId], pNombre);
-                    });
+                    if (p.notas[alum]) {
+                      Object.keys(p.notas[alum]).forEach(critId => {
+                        registrarNotaConOrigen(cKey, eKey, alum, critId, p.notas[alum][critId], pNombre);
+                      });
+                    }
                   });
                 }
               });
@@ -509,34 +468,36 @@ if (key.includes("evaluador_directo_pruebas") || key === "estadoGeneral") {
       return;
     }
 
-    Object.keys(data).forEach(cKey => {
-      const cNorm = normalizarCurso(cKey);
-      if (cNorm && typeof data[cKey] === "object") {
-        const sub = data[cKey];
-        Object.keys(sub).forEach(subKey => {
-          if (["1T", "2T", "3T"].includes(subKey.toUpperCase())) {
-            const eKey = subKey.toUpperCase();
-            Object.keys(sub[subKey]).forEach(alum => {
-              Object.keys(sub[subKey][alum]).forEach(critId => {
-                registrarNotaConOrigen(cNorm, eKey, alum, critId, sub[subKey][alum][critId], "Evaluación Directa");
-              });
-            });
-          } else if (typeof sub[subKey] === "object") {
-            Object.keys(sub[subKey]).forEach(critId => {
-              registrarNotaConOrigen(cNorm, "1T", subKey, critId, sub[subKey][critId], "Evaluación Directa");
-            });
-          }
-        });
-      }
-    });
+    // Compatibilidad con otros formatos de SdA (Doblador, Retos, etc.)
+    if (key.includes("doblador")) {
+      const grupo = data.grupo || "2A";
+      const alumno = data.alumno || "";
+      const map = { c1: "TYD.2.3.1", c2: "TYD.2.2.2", c3: "TYD.2.1.2" };
+      Object.keys(map).forEach(ck => {
+        if (data[ck] !== undefined) registrarNotaConOrigen(grupo, "1T", alumno, map[ck], data[ck], "SdA Doblador");
+      });
+      return;
+    }
+
+    if (key.includes("retos3eso")) {
+      const parts = key.split("_");
+      const grupo = parts[1] || "3A";
+      const alumno = data.alumno || "";
+      const map = { c1: "TYD.3.1.1", c2: "TYD.3.1.3", c3: "TYD.3.2.1", c4: "TYD.3.2.2", c5: "TYD.3.4.1", c6: "TYD.3.7.1" };
+      Object.keys(map).forEach(ck => {
+        if (data[ck] !== undefined) registrarNotaConOrigen(grupo, "1T", alumno, map[ck], data[ck], "SdA Retos 3º ESO");
+      });
+      return;
+    }
   }
 
   function cargarYRefrescarDatos() {
     matrizAcumuladaBD = {};
 
+    // 1. Leer desde localStorage
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (!k || k.includes("alumnos")) continue;
+      if (!k) continue;
       try {
         const val = JSON.parse(localStorage.getItem(k));
         parsearEntradaUniversal(k, val);
@@ -548,34 +509,35 @@ if (key.includes("evaluador_directo_pruebas") || key === "estadoGeneral") {
 
   function activarEscuchaNube() {
     if (!db) return;
-    const colecciones = ["evaluaciones", "eniac_4eso_notas", "doblador_2eso_notas", "evaluacion_directa"];
 
-    colecciones.forEach(collName => {
-      db.collection(collName).onSnapshot(snapshot => {
-        snapshot.forEach(doc => {
-          try {
-            const data = doc.data();
-            if (collName === "evaluacion_directa" && doc.id === "estadoGeneral" && data.data) {
-              localStorage.setItem("evaluador_directo_pruebas_v8", JSON.stringify(data.data));
-            } else {
-              localStorage.setItem(collName + "_" + doc.id, JSON.stringify(data));
-            }
-          } catch(e) {
-            console.warn("Error parseando " + collName + ":", e);
-          }
-        });
-        cargarYRefrescarDatos();
-        const badge = document.getElementById("syncStatusBadge");
-        if (badge) badge.textContent = "☁️ Nube Conectada (" + new Date().toLocaleTimeString() + ")";
-      }, err => {
-        console.warn("Error en la escucha de nube (" + collName + "):", err);
-      });
+    // Escucha en tiempo real de Firestore para el Evaluador Directo
+    db.collection("evaluacion_directa").doc("estadoGeneral").onSnapshot(doc => {
+      if (doc.exists) {
+        const cloudData = doc.data();
+        if (cloudData && cloudData.data) {
+          localStorage.setItem("evaluador_directo_pruebas_v8", JSON.stringify(cloudData.data));
+          parsearEntradaUniversal("estadoGeneral", cloudData);
+          renderizarMatrizSeguimiento();
+          const badge = document.getElementById("syncStatusBadge");
+          if (badge) badge.textContent = "☁️ Nube Sincronizada (" + new Date().toLocaleTimeString() + ")";
+        }
+      }
+    }, err => {
+      console.warn("Error en escucha Firestore:", err);
     });
   }
 
   function sincronizarConNubeFirestore() {
-    cargarYRefrescarDatos();
-    alert("✅ Datos integrados y actualizados correctamente.");
+    db.collection("evaluacion_directa").doc("estadoGeneral").get().then(doc => {
+      if (doc.exists && doc.data().data) {
+        localStorage.setItem("evaluador_directo_pruebas_v8", JSON.stringify(doc.data().data));
+      }
+      cargarYRefrescarDatos();
+      alert("✅ Datos recargados y sincronizados correctamente desde la nube.");
+    }).catch(err => {
+      cargarYRefrescarDatos();
+      alert("✅ Datos recargados desde almacenamiento local.");
+    });
   }
 
   function obtenerNivelCurso(curso) {
@@ -624,7 +586,7 @@ if (key.includes("evaluador_directo_pruebas") || key === "estadoGeneral") {
       bannerContainer.style.display = "block";
       let htmlBanner = `
         <div class="banner-pendientes">
-          📌 <strong>Criterios del Currículo Pendientes de Evaluar en la ${evalSeleccionada.replace('T', 'ª Evaluacion')}:</strong> (${criteriosPendientes.length} sin actividades)<br>
+          📌 <strong>Criterios del Currículo Pendientes de Evaluar en la ${evalSeleccionada.replace('T', 'ª Evaluación')}:</strong> (${criteriosPendientes.length} sin actividades)<br>
           <div style="margin-top:6px;">
       `;
       criteriosPendientes.forEach(c => {
@@ -816,13 +778,11 @@ if (key.includes("evaluador_directo_pruebas") || key === "estadoGeneral") {
 
     document.getElementById("tituloFichaAlumno").textContent = `👤 Ficha de Seguimiento Individual: ${alumno}`;
 
-    let totalCriterios = criteriosOficiales.length;
     let sumMedias = 0;
     let evalCount = 0;
     let pasadosList = [];
     let suspensosList = [];
     let noEvaluadosList = [];
-
     let historialCompleto = [];
 
     let labelsRadar = [];
@@ -855,7 +815,6 @@ if (key.includes("evaluador_directo_pruebas") || key === "estadoGeneral") {
         noEvaluadosList.push(crit.id);
       }
 
-      // Media del Grupo para este Criterio
       let sumaMediasGrupoCrit = 0;
       let countAlumsConNotaGrupo = 0;
 
@@ -903,30 +862,16 @@ if (key.includes("evaluador_directo_pruebas") || key === "estadoGeneral") {
       html += `<span class="badge-nota badge-pass" style="margin:3px;">${c.id}: ${c.media}</span>`;
     });
 
-    html += `
-        </div>
-      </div>
-
-      <div style="margin-bottom:16px;">
-        <h4 style="font-size:0.88rem; font-weight:800; color:#b91c1c; margin-bottom:6px;">❌ Criterios Suspensos (< 5.0):</h4>
-        <div>
-    `;
+    html += `</div></div><div style="margin-bottom:16px;"><h4 style="font-size:0.88rem; font-weight:800; color:#b91c1c; margin-bottom:6px;">❌ Criterios Suspensos (< 5.0):</h4><div>`;
 
     if (suspensosList.length === 0) html += `<span style="font-size:0.82rem; color:#64748b;">Ninguno</span>`;
     suspensosList.forEach(c => {
       html += `<span class="badge-nota badge-fail" style="margin:3px;">${c.id}: ${c.media}</span>`;
     });
 
-    html += `
-        </div>
-      </div>
+    html += `</div></div><div style="margin-bottom:16px;"><h4 style="font-size:0.88rem; font-weight:800; color:#b45309; margin-bottom:6px;">⏳ Criterios Pendientes por Evaluar:</h4><div>`;
 
-      <div style="margin-bottom:16px;">
-        <h4 style="font-size:0.88rem; font-weight:800; color:#b45309; margin-bottom:6px;">⏳ Criterios Pendientes por Evaluar:</h4>
-        <div>
-    `;
-
-    if (noEvaluadosList.length === 0) html += `<span style="font-size:0.82rem; color:#64748b;">¡Todos los criterios del curso han sido evaluados!</span>`;
+    if (noEvaluadosList.length === 0) html += `<span style="font-size:0.82rem; color:#64748b;">¡Todos los criterios han sido evaluados!</span>`;
     noEvaluadosList.forEach(id => {
       html += `<span class="chip-pendiente">${id}</span>`;
     });
@@ -936,9 +881,7 @@ if (key.includes("evaluador_directo_pruebas") || key === "estadoGeneral") {
       </div>
 
       <div style="margin-top:20px; margin-bottom:20px; background:#f8fafc; padding:16px; border-radius:10px; border:1px solid #e2e8f0;">
-        <h4 style="font-size:0.92rem; font-weight:800; color:#1e293b; margin-bottom:10px; display:flex; align-items:center; gap:8px;">
-          🎯 Diana Competencial (Comparativa con el Grupo)
-        </h4>
+        <h4 style="font-size:0.92rem; font-weight:800; color:#1e293b; margin-bottom:10px;">🎯 Diana Competencial (Comparativa con el Grupo)</h4>
         <div style="position:relative; width:100%; max-width:520px; margin:0 auto; height:320px;">
           <canvas id="chartRadarAlumno"></canvas>
         </div>
@@ -958,7 +901,7 @@ if (key.includes("evaluador_directo_pruebas") || key === "estadoGeneral") {
     `;
 
     if (historialCompleto.length === 0) {
-      html += `<tr><td colspan="4" style="text-align:center; color:#64748b; padding:12px;">No se han registrado notas aún para este alumno/a.</td></tr>`;
+      html += `<tr><td colspan="4" style="text-align:center; color:#64748b; padding:12px;">No hay notas registradas.</td></tr>`;
     } else {
       historialCompleto.forEach(item => {
         html += `
@@ -972,80 +915,30 @@ if (key.includes("evaluador_directo_pruebas") || key === "estadoGeneral") {
       });
     }
 
-    html += `
-        </tbody>
-      </table>
-    `;
-
+    html += `</tbody></table>`;
     document.getElementById("contenidoFichaAlumno").innerHTML = html;
     document.getElementById("modalFichaAlumno").style.display = "flex";
 
-    // Renderizar gráfico Radar de Chart.js
-    if (window.chartAlumnoInstance) {
-      window.chartAlumnoInstance.destroy();
-    }
+    if (window.chartAlumnoInstance) window.chartAlumnoInstance.destroy();
     const canvasRadar = document.getElementById("chartRadarAlumno");
     if (canvasRadar && labelsRadar.length > 0) {
-      const ctx = canvasRadar.getContext("2d");
-      window.chartAlumnoInstance = new Chart(ctx, {
+      window.chartAlumnoInstance = new Chart(canvasRadar.getContext("2d"), {
         type: "radar",
         data: {
           labels: labelsRadar,
           datasets: [
-            {
-              label: alumno,
-              data: dataAlumnoRadar,
-              backgroundColor: "rgba(2, 132, 199, 0.25)",
-              borderColor: "#0284c7",
-              pointBackgroundColor: "#0284c7",
-              borderWidth: 2,
-              fill: true
-            },
-            {
-              label: "Media Grupo (" + curso.replace('_', ' ') + ")",
-              data: dataGrupoRadar,
-              backgroundColor: "rgba(100, 116, 139, 0.15)",
-              borderColor: "#64748b",
-              pointBackgroundColor: "#64748b",
-              borderWidth: 1.5,
-              borderDash: [4, 4],
-              fill: true
-            }
+            { label: alumno, data: dataAlumnoRadar, backgroundColor: "rgba(2, 132, 199, 0.25)", borderColor: "#0284c7", pointBackgroundColor: "#0284c7", borderWidth: 2, fill: true },
+            { label: "Media Grupo", data: dataGrupoRadar, backgroundColor: "rgba(100, 116, 139, 0.15)", borderColor: "#64748b", pointBackgroundColor: "#64748b", borderWidth: 1.5, borderDash: [4, 4], fill: true }
           ]
         },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: {
-            r: {
-              min: 0,
-              max: 10,
-              ticks: { stepSize: 2, font: { size: 10 } },
-              pointLabels: { font: { size: 10, weight: "bold" } }
-            }
-          },
-          plugins: {
-            legend: { position: "top", labels: { font: { size: 11, weight: "bold" } } }
-          }
-        }
+        options: { responsive: true, maintainAspectRatio: false, scales: { r: { min: 0, max: 10, ticks: { stepSize: 2 } } } }
       });
     }
   }
 
-
   function abrirModalComparadorGrupos() {
     const cursoSel = document.getElementById("selectCurso").value;
     document.getElementById("selectGrupoComp1").value = cursoSel;
-    
-    let rival = "2ESO_B";
-    if (cursoSel === "2ESO_A") rival = "2ESO_B";
-    else if (cursoSel === "2ESO_B") rival = "2ESO_A";
-    else if (cursoSel === "3ESO_A") rival = "3ESO_B";
-    else if (cursoSel === "3ESO_B") rival = "3ESO_A";
-    else if (cursoSel === "4ESO_A") rival = "4ESO_B";
-    else if (cursoSel === "4ESO_B") rival = "4ESO_A";
-    
-    document.getElementById("selectGrupoComp2").value = rival;
     document.getElementById("modalComparadorGrupos").style.display = "flex";
     actualizarGraficoComparativoGrupos();
   }
@@ -1053,7 +946,6 @@ if (key.includes("evaluador_directo_pruebas") || key === "estadoGeneral") {
   function actualizarGraficoComparativoGrupos() {
     const g1 = document.getElementById("selectGrupoComp1").value;
     const g2 = document.getElementById("selectGrupoComp2").value;
-
     const nivel1 = obtenerNivelCurso(g1);
     const criteriosList = CRITERIOS_POR_NIVEL[nivel1] || [];
 
@@ -1062,15 +954,10 @@ if (key.includes("evaluador_directo_pruebas") || key === "estadoGeneral") {
     const datosG1 = matrizAcumuladaBD[g1] || {};
     const datosG2 = matrizAcumuladaBD[g2] || {};
 
-    let labelsComp = [];
-    let dataG1 = [];
-    let dataG2 = [];
-
-    let sumaGlobalG1 = 0, countGlobalG1 = 0;
-    let sumaGlobalG2 = 0, countGlobalG2 = 0;
+    let labelsComp = [], dataG1 = [], dataG2 = [];
+    let sumaGlobalG1 = 0, countGlobalG1 = 0, sumaGlobalG2 = 0, countGlobalG2 = 0;
 
     criteriosList.forEach(crit => {
-      // Calc G1 avg for this crit
       let sumaCrit1 = 0, countCrit1 = 0;
       alums1.forEach(al => {
         const alNorm = normalizarTexto(al);
@@ -1081,15 +968,13 @@ if (key.includes("evaluador_directo_pruebas") || key === "estadoGeneral") {
           }
         });
         if (arr.length > 0) {
-          const avg = arr.reduce((a, b) => a + b.valor, 0) / arr.length;
-          sumaCrit1 += avg;
+          sumaCrit1 += arr.reduce((a, b) => a + b.valor, 0) / arr.length;
           countCrit1++;
         }
       });
       const avgG1Crit = countCrit1 > 0 ? (sumaCrit1 / countCrit1) : null;
       if (avgG1Crit !== null) { sumaGlobalG1 += avgG1Crit; countGlobalG1++; }
 
-      // Calc G2 avg for this crit
       let sumaCrit2 = 0, countCrit2 = 0;
       alums2.forEach(al => {
         const alNorm = normalizarTexto(al);
@@ -1100,8 +985,7 @@ if (key.includes("evaluador_directo_pruebas") || key === "estadoGeneral") {
           }
         });
         if (arr.length > 0) {
-          const avg = arr.reduce((a, b) => a + b.valor, 0) / arr.length;
-          sumaCrit2 += avg;
+          sumaCrit2 += arr.reduce((a, b) => a + b.valor, 0) / arr.length;
           countCrit2++;
         }
       });
@@ -1115,121 +999,64 @@ if (key.includes("evaluador_directo_pruebas") || key === "estadoGeneral") {
       }
     });
 
-    const mediaFinalG1 = countGlobalG1 > 0 ? (sumaGlobalG1 / countGlobalG1).toFixed(2) : "-";
-    const mediaFinalG2 = countGlobalG2 > 0 ? (sumaGlobalG2 / countGlobalG2).toFixed(2) : "-";
-
-    const resumenDiv = document.getElementById("resumenComparativoGrupos");
-    resumenDiv.innerHTML = `
-      <div class="summary-item"><label>Media ${g1.replace('_', ' ')}</label><val style="font-size:1.3rem; color:#0284c7;">${mediaFinalG1}</val></div>
-      <div class="summary-item"><label>Media ${g2.replace('_', ' ')}</label><val style="font-size:1.3rem; color:#0d9488;">${mediaFinalG2}</val></div>
-      <div class="summary-item"><label>Criterios Evaluados</label><val style="font-size:1.2rem; color:#475569;">${labelsComp.length}</val></div>
+    document.getElementById("resumenComparativoGrupos").innerHTML = `
+      <div class="summary-item"><label>Media ${g1.replace('_', ' ')}</label><val style="font-size:1.3rem; color:#0284c7;">${countGlobalG1 > 0 ? (sumaGlobalG1 / countGlobalG1).toFixed(2) : "-"}</val></div>
+      <div class="summary-item"><label>Media ${g2.replace('_', ' ')}</label><val style="font-size:1.3rem; color:#0d9488;">${countGlobalG2 > 0 ? (sumaGlobalG2 / countGlobalG2).toFixed(2) : "-"}</val></div>
     `;
 
-    if (window.chartGruposInstance) {
-      window.chartGruposInstance.destroy();
-    }
-
+    if (window.chartGruposInstance) window.chartGruposInstance.destroy();
     const canvasComp = document.getElementById("chartComparadorGrupos");
-    if (!canvasComp) return;
-
-    const ctx = canvasComp.getContext("2d");
-    window.chartGruposInstance = new Chart(ctx, {
-      type: "bar",
-      data: {
-        labels: labelsComp,
-        datasets: [
-          {
-            label: g1.replace('_', ' '),
-            data: dataG1,
-            backgroundColor: "rgba(2, 132, 199, 0.85)",
-            borderColor: "#0284c7",
-            borderWidth: 1,
-            borderRadius: 4
-          },
-          {
-            label: g2.replace('_', ' '),
-            data: dataG2,
-            backgroundColor: "rgba(13, 148, 136, 0.85)",
-            borderColor: "#0d9488",
-            borderWidth: 1,
-            borderRadius: 4
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          y: {
-            min: 0,
-            max: 10,
-            ticks: { stepSize: 2 }
-          },
-          x: {
-            ticks: { font: { size: 10, weight: "bold" } }
-          }
+    if (canvasComp) {
+      window.chartGruposInstance = new Chart(canvasComp.getContext("2d"), {
+        type: "bar",
+        data: {
+          labels: labelsComp,
+          datasets: [
+            { label: g1.replace('_', ' '), data: dataG1, backgroundColor: "rgba(2, 132, 199, 0.85)" },
+            { label: g2.replace('_', ' '), data: dataG2, backgroundColor: "rgba(13, 148, 136, 0.85)" }
+          ]
         },
-        plugins: {
-          legend: { position: "top", labels: { font: { size: 11, weight: "bold" } } }
-        }
-      }
-    });
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 10 } } }
+      });
+    }
   }
 
-  function cerrarModal(modalId) {
-    document.getElementById(modalId).style.display = "none";
-  }
-
+  function cerrarModal(modalId) { document.getElementById(modalId).style.display = "none"; }
   function abrirModalAlumnos() {
     const curso = document.getElementById("selectCurso").value;
-    document.getElementById("modalTituloGrupo").textContent = `👥 Modificar Lista de Alumnos (${curso.replace('_', ' ')})`;
-    const lista = alumnosBD[curso] || [];
-    document.getElementById("txtListaAlumnos").value = lista.join("\n");
+    document.getElementById("modalTituloGrupo").textContent = `👥 Modificar Alumnos (${curso.replace('_', ' ')})`;
+    document.getElementById("txtListaAlumnos").value = (alumnosBD[curso] || []).join("\n");
     document.getElementById("modalAlumnos").style.display = "flex";
   }
-
   function guardarListaAlumnosCustom() {
     const curso = document.getElementById("selectCurso").value;
-    const txt = document.getElementById("txtListaAlumnos").value;
-    const lineas = txt.split("\n").map(l => l.trim()).filter(l => l.length > 0);
-
-    alumnosBD[curso] = lineas;
+    alumnosBD[curso] = document.getElementById("txtListaAlumnos").value.split("\n").map(l => l.trim()).filter(l => l.length > 0);
     localStorage.setItem("evaluador_directo_alumnos_v2", JSON.stringify(alumnosBD));
     cerrarModal("modalAlumnos");
     renderizarMatrizSeguimiento();
-    alert("✅ Lista de alumnos actualizada correctamente para " + curso.replace('_', ' ') + ".");
   }
 
   function exportarCSVMatriz() {
     const curso = document.getElementById("selectCurso").value;
     const evalSel = document.getElementById("selectEval").value;
-    const nivel = obtenerNivelCurso(curso);
-    const criteriosList = CRITERIOS_POR_NIVEL[nivel] || CRITERIOS_POR_NIVEL["2ESO"];
-    const listaAlumnos = alumnosBD[curso] || [];
-
+    const criteriosList = CRITERIOS_POR_NIVEL[obtenerNivelCurso(curso)] || [];
     let csv = "Alumno;";
     criteriosList.forEach(c => csv += c.id + ";");
-    csv += "Media_Criterios;Estado\n";
+    csv += "Media;Estado\n";
 
-    listaAlumnos.forEach(alumno => {
+    (alumnosBD[curso] || []).forEach(alumno => {
       csv += '"' + alumno + '";';
       const alumNorm = normalizarTexto(alumno);
       let suma = 0, count = 0;
-
       criteriosList.forEach(c => {
         let arr = [];
         if (evalSel === "GLOBAL") {
-          if (matrizAcumuladaBD[curso]) {
-            Object.keys(matrizAcumuladaBD[curso]).forEach(eKey => {
-              if (matrizAcumuladaBD[curso][eKey][alumNorm] && matrizAcumuladaBD[curso][eKey][alumNorm][c.id]) {
-                arr = arr.concat(matrizAcumuladaBD[curso][eKey][alumNorm][c.id]);
-              }
-            });
-          }
-        } else if (matrizAcumuladaBD[curso] && matrizAcumuladaBD[curso][evalSel] && matrizAcumuladaBD[curso][evalSel][alumNorm]) {
-          arr = matrizAcumuladaBD[curso][evalSel][alumNorm][c.id] || [];
+          Object.keys(matrizAcumuladaBD[curso] || {}).forEach(eKey => {
+            if (matrizAcumuladaBD[curso][eKey][alumNorm]?.[c.id]) arr = arr.concat(matrizAcumuladaBD[curso][eKey][alumNorm][c.id]);
+          });
+        } else {
+          arr = matrizAcumuladaBD[curso]?.[evalSel]?.[alumNorm]?.[c.id] || [];
         }
-
         let scoreStr = "";
         if (arr.length > 0) {
           const avg = arr.reduce((a, b) => a + b.valor, 0) / arr.length;
@@ -1239,22 +1066,16 @@ if (key.includes("evaluador_directo_pruebas") || key === "estadoGeneral") {
         }
         csv += scoreStr + ";";
       });
-
       const media = count > 0 ? (suma / count).toFixed(2) : "";
-      const estado = count > 0 ? (parseFloat(media) >= 5 ? "APROBADO" : "SUSPENSO") : "";
-      csv += media + ";" + estado + "\n";
+      csv += media + ";" + (count > 0 ? (parseFloat(media) >= 5 ? "APROBADO" : "SUSPENSO") : "") + "\n";
     });
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = "Cuaderno_Seguimiento_" + curso + "_" + evalSel + ".csv";
+    link.download = "Cuaderno_Seguimiento_" + curso + ".csv";
     link.click();
   }
-
-  window.addEventListener("storage", () => {
-    cargarYRefrescarDatos();
-  });
 
   document.addEventListener("DOMContentLoaded", () => {
     cargarAlumnosBD();
