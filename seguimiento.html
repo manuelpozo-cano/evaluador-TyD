@@ -485,7 +485,7 @@
       return;
     }
 
-    if (key.includes("evaluador_directo_pruebas") || key === "estadoGeneral") {
+if (key.includes("evaluador_directo_pruebas") || key === "estadoGeneral") {
       Object.keys(data).forEach(cKey => {
         const evDict = data[cKey];
         if (typeof evDict === "object" && evDict) {
