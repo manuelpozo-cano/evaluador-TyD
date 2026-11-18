@@ -486,9 +486,8 @@
     }
 
     if (key.includes("evaluador_directo_pruebas") || key === "estadoGeneral") {
-      const payload = (data.data && typeof data.data === "object") ? data.data : data;
-      Object.keys(payload).forEach(cKey => {
-        const evDict = payload[cKey];
+      Object.keys(data).forEach(cKey => {
+        const evDict = data[cKey];
         if (typeof evDict === "object" && evDict) {
           Object.keys(evDict).forEach(eKey => {
             const pruebaList = evDict[eKey];
@@ -557,9 +556,7 @@
           try {
             const data = doc.data();
             if (collName === "evaluacion_directa" && doc.id === "estadoGeneral" && data.data) {
-              if (Object.keys(data.data).length > 0) {
-                localStorage.setItem("evaluador_directo_pruebas_v8", JSON.stringify(data.data));
-              }
+              localStorage.setItem("evaluador_directo_pruebas_v8", JSON.stringify(data.data));
             } else {
               localStorage.setItem(collName + "_" + doc.id, JSON.stringify(data));
             }
@@ -819,6 +816,7 @@
 
     document.getElementById("tituloFichaAlumno").textContent = `👤 Ficha de Seguimiento Individual: ${alumno}`;
 
+    let totalCriterios = criteriosOficiales.length;
     let sumMedias = 0;
     let evalCount = 0;
     let pasadosList = [];
@@ -857,6 +855,7 @@
         noEvaluadosList.push(crit.id);
       }
 
+      // Media del Grupo para este Criterio
       let sumaMediasGrupoCrit = 0;
       let countAlumsConNotaGrupo = 0;
 
@@ -981,6 +980,7 @@
     document.getElementById("contenidoFichaAlumno").innerHTML = html;
     document.getElementById("modalFichaAlumno").style.display = "flex";
 
+    // Renderizar gráfico Radar de Chart.js
     if (window.chartAlumnoInstance) {
       window.chartAlumnoInstance.destroy();
     }
@@ -1070,6 +1070,7 @@
     let sumaGlobalG2 = 0, countGlobalG2 = 0;
 
     criteriosList.forEach(crit => {
+      // Calc G1 avg for this crit
       let sumaCrit1 = 0, countCrit1 = 0;
       alums1.forEach(al => {
         const alNorm = normalizarTexto(al);
@@ -1088,6 +1089,7 @@
       const avgG1Crit = countCrit1 > 0 ? (sumaCrit1 / countCrit1) : null;
       if (avgG1Crit !== null) { sumaGlobalG1 += avgG1Crit; countGlobalG1++; }
 
+      // Calc G2 avg for this crit
       let sumaCrit2 = 0, countCrit2 = 0;
       alums2.forEach(al => {
         const alNorm = normalizarTexto(al);
@@ -1182,16 +1184,14 @@
     const curso = document.getElementById("selectCurso").value;
     document.getElementById("modalTituloGrupo").textContent = `👥 Modificar Lista de Alumnos (${curso.replace('_', ' ')})`;
     const lista = alumnosBD[curso] || [];
-    document.getElementById("txtListaAlumnos").value = lista.join("
-");
+    document.getElementById("txtListaAlumnos").value = lista.join("\n");
     document.getElementById("modalAlumnos").style.display = "flex";
   }
 
   function guardarListaAlumnosCustom() {
     const curso = document.getElementById("selectCurso").value;
     const txt = document.getElementById("txtListaAlumnos").value;
-    const lineas = txt.split("
-").map(l => l.trim()).filter(l => l.length > 0);
+    const lineas = txt.split("\n").map(l => l.trim()).filter(l => l.length > 0);
 
     alumnosBD[curso] = lineas;
     localStorage.setItem("evaluador_directo_alumnos_v2", JSON.stringify(alumnosBD));
@@ -1209,8 +1209,7 @@
 
     let csv = "Alumno;";
     criteriosList.forEach(c => csv += c.id + ";");
-    csv += "Media_Criterios;Estado
-";
+    csv += "Media_Criterios;Estado\n";
 
     listaAlumnos.forEach(alumno => {
       csv += '"' + alumno + '";';
@@ -1243,8 +1242,7 @@
 
       const media = count > 0 ? (suma / count).toFixed(2) : "";
       const estado = count > 0 ? (parseFloat(media) >= 5 ? "APROBADO" : "SUSPENSO") : "";
-      csv += media + ";" + estado + "
-";
+      csv += media + ";" + estado + "\n";
     });
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
